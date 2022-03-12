@@ -7,4 +7,4 @@
   * pyinstaller -F -w main.py
 * 打包好後的檔案將會放在多出來的dist資料夾中即可使用   
 
-[Windows執行檔 請點我下載]([http://markdown.tw/](https://github.com/MeowXiaoXiang/WarframePairBlockTool/releases/download/v1.0/WarframePairBlockTool.exe) "下載 release v1.0")
+[Windows執行檔 請點我下載](https://github.com/MeowXiaoXiang/WarframePairBlockTool/releases/download/v1.0/WarframePairBlockTool.exe) "下載 release v1.0")
