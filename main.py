@@ -11,14 +11,14 @@ def is_admin():
 if is_admin():
     window = tk.Tk()
     window.title('WarframePairBlockTool')
-    window.geometry('500x440')
+    window.geometry('500x245')
     def rule_status():
-        if os.system('netsh advfirewall firewall show rule name=WarframePairBlockPort dir=out') == 0:
+        if os.system('netsh advfirewall firewall show rule name=WarframePairBlockPort dir=out') == 1:
             status_label['bg'] = 'Lime'
-            status_label['text'] = '目前狀態：找到了所需的防火牆輸出規則 已可使用功能'
-        elif os.system('netsh advfirewall firewall show rule name=WarframePairBlockPort dir=out') == 1:
+            status_label['text'] = '目前狀態：正常連線中 輸出未被封鎖'
+        elif os.system('netsh advfirewall firewall show rule name=WarframePairBlockPort dir=out') == 0:
             status_label['bg'] = 'Red'
-            status_label['text'] = '目前狀態：找不到所需的防火牆輸出規則'
+            status_label['text'] = '目前狀態：已經封鎖輸出'
 
     '''此功能用以偵測程序的目標位置 本工具版本不使用這個而註解
     def Process_path(processname):
@@ -33,7 +33,7 @@ if is_admin():
     def create_rule():
         WFPORT = port_combo.get().split(' & ')
         if os.system(f'start /B netsh advfirewall firewall add rule name=WarframePairBlockPort protocol=UDP dir=out localport={WFPORT[0]}-{WFPORT[1]} action=block') == 0:
-            os.system("start /B netsh advfirewall firewall set rule name=WarframePairBlockPort new enable=no")
+            os.system("start /B netsh advfirewall firewall set rule name=WarframePairBlockPort new enable=yes")
             messagebox.showinfo('訊息', '已成功新增防火牆輸出規則！')
         elif os.system(f'start /B netsh advfirewall firewall add rule name=WarframePairBlockPort protocol=UDP dir=out localport={WFPORT[0]}-{WFPORT[1]} action=block') == 1:
             messagebox.showinfo('訊息', '請用系統管理員身分執行程式')
@@ -48,20 +48,6 @@ if is_admin():
         
     def check_rule():
         os.system('start /B C:\Windows\system32\wf.msc')
-        rule_status()
-
-    def rule_on():
-        if os.system("start /B netsh advfirewall firewall set rule name=WarframePairBlockPort new enable=yes") == 0: 
-            messagebox.showinfo('訊息', '已封鎖輸出 ＆ 阻止配對')
-        elif os.system("start /B netsh advfirewall firewall set rule name=WarframePairBlockPort new enable=yes") == 1:
-            messagebox.showinfo('訊息', '找不到指定的規則 請使用產生防火牆輸出規則按鈕')
-        rule_status()
-
-    def rule_off():
-        if os.system("start /B netsh advfirewall firewall set rule name=WarframePairBlockPort new enable=no") == 0: 
-            messagebox.showinfo('訊息', '回復輸出 ＆ 正常配對')
-        elif os.system("start /B netsh advfirewall firewall set rule name=WarframePairBlockPort new enable=no") == 1:
-            messagebox.showinfo('訊息', '找不到指定的規則 請使用產生防火牆輸出規則按鈕')
         rule_status()
 
     header_label = tk.Label(window, text='Warframe配對限制器工具(強制主機)[封Port]\n若狀態顯示(找不到所需的防火牆輸出規則)\n請點[偵測並產生防火牆輸出規則]')
@@ -86,32 +72,22 @@ if is_admin():
 
     generate = tk.Frame(window)
     generate.pack(side=tk.TOP)
-    btn_generate = tk.Button(generate, text='產生防火牆輸出規則',height = 2 ,width = 30,command=create_rule)
-    btn_generate.pack()
+    btn_check = tk.Button(generate, text='查看防火牆',height = 1 ,width = 30,command=check_rule)
+    btn_check.pack()
     generate_blank_label = tk.Label(window)
     generate_blank_label.pack()
 
     btn_frame = tk.Frame(window)
     btn_frame.pack(side=tk.TOP)
-    btn_del = tk.Button(btn_frame, text='刪除防火牆輸出規則',height = 2 ,width = 30,command=del_rule)
+    btn_generate = tk.Button(btn_frame, text='產生規則並封鎖輸出',height = 2 ,width = 30,command=create_rule)
+    btn_generate.pack(side='left', padx=10)
+    btn_del = tk.Button(btn_frame, text='刪除規則並回復輸出',height = 2 ,width = 30,command=del_rule)
     btn_del.pack(side='left', padx=10)
-    btn_check = tk.Button(btn_frame, text='查看防火牆',height = 2 ,width = 30,command=check_rule)
-    btn_check.pack(side='left', padx=10)
+
 
     blank_label = tk.Label(window)
     blank_label.pack()
 
-    blockade_btn = tk.Button(window, text='封鎖輸出 ＆ 阻止配對',height = 4 ,width = 60,command=rule_on)
-    blockade_btn.pack()
-
-    blank_label = tk.Label(window)
-    blank_label.pack()
-
-    recovery_btn = tk.Button(window, text='回復輸出 ＆ 正常配對',height = 4 ,width = 60,command=rule_off)
-    recovery_btn.pack()
-
-    blank_label = tk.Label(window)
-    blank_label.pack()
 
     author_label = tk.Label(window, text='此工具由小翔製作')
     author_label.pack()
