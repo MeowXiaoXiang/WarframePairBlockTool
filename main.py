@@ -1,8 +1,7 @@
-import os
+import subprocess, ctypes, sys, win32api
 import tkinter as tk
 from tkinter import messagebox,ttk
-import ctypes, sys
-
+# win32 api pip install pypiwin32
 def is_admin():
     try:
         return ctypes.windll.shell32.IsUserAnAdmin()
@@ -13,11 +12,12 @@ if is_admin():
     window.title('WarframePairBlockTool')
     window.geometry('250x325')
     def rule_status():
-        if os.system('netsh advfirewall firewall show rule name=WarframePairBlockPort dir=out') == 1:
+        status = subprocess.run('netsh advfirewall firewall show rule name=WarframePairBlockPort dir=out', shell=False)
+        if status.returncode == 1:
             status_label['bg'] = 'SpringGreen3'
             status_label['fg'] = 'Black'
             status_label['text'] = '目前狀態：配對目前正常'
-        elif os.system('netsh advfirewall firewall show rule name=WarframePairBlockPort dir=out') == 0:
+        elif status.returncode == 0:
             status_label['bg'] = 'firebrick2'
             status_label['fg'] = 'white'
             status_label['text'] = '目前狀態：配對已阻斷'
@@ -34,22 +34,23 @@ if is_admin():
 
     def create_rule():
         WFPORT = port_combo.get().split(' & ')
-        if os.system(f'start /B netsh advfirewall firewall add rule name=WarframePairBlockPort protocol=UDP dir=out localport={WFPORT[0]}-{WFPORT[1]} action=block') == 0:
-            os.system("start /B netsh advfirewall firewall set rule name=WarframePairBlockPort new enable=yes")
-            messagebox.showinfo('訊息', '已成功新增防火牆輸出規則！')
-        elif os.system(f'start /B netsh advfirewall firewall add rule name=WarframePairBlockPort protocol=UDP dir=out localport={WFPORT[0]}-{WFPORT[1]} action=block') == 1:
+        status = subprocess.run(F"netsh advfirewall firewall add rule name=WarframePairBlockPort protocol=UDP dir=out localport={WFPORT[0]}-{WFPORT[1]} action=block", shell=False)
+        if status.returncode == 0:
+            subprocess.run("netsh advfirewall firewall set rule name=WarframePairBlockPort new enable=yes", shell=False)
+        elif status.returncode == 1:
             messagebox.showinfo('訊息', '請用系統管理員身分執行程式')
         rule_status()
         
     def del_rule():
-        if os.system('start /B netsh advfirewall firewall delete rule name=WarframePairBlockPort') == 0:
-            messagebox.showinfo('訊息', '已成功刪除防火牆輸出規則！')
-        elif os.system('start /B netsh advfirewall firewall delete rule name=WarframePairBlockPort') == 1:
-            messagebox.showinfo('訊息', '請用系統管理員身分執行程式或\n找不到要刪除的規則(或許不存在 可以使用)')
-        rule_status()
+        status = subprocess.run("netsh advfirewall firewall delete rule name=WarframePairBlockPort", shell=False)
+        if status.returncode == 0:
+            rule_status()
+        elif status.returncode == 1:
+            messagebox.showinfo('訊息', '請用系統管理員身分執行程式\n或目前配對狀態為正常')
+            rule_status()
         
     def check_rule():
-        os.system('start /B C:\Windows\system32\wf.msc')
+        win32api.ShellExecute(0, 'open', 'wf.msc', '', '', 1)
         rule_status()
 
     header_label = tk.Label(window, text='Warframe 配對限制器（強制主機）\n[ 封鎖 UDP 輸出 Port ]')
