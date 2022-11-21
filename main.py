@@ -12,7 +12,7 @@ if is_admin():
     window.title('WarframePairBlockTool')
     window.geometry('250x325')
     def rule_status():
-        status = subprocess.run('netsh advfirewall firewall show rule name=WarframePairBlockPort dir=out', shell=False)
+        status = subprocess.run('netsh advfirewall firewall show rule name=WarframePairBlockPort dir=out', shell=True)
         if status.returncode == 1:
             status_label['bg'] = 'SpringGreen3'
             status_label['fg'] = 'Black'
@@ -34,15 +34,15 @@ if is_admin():
 
     def create_rule():
         WFPORT = port_combo.get().split(' & ')
-        status = subprocess.run(F"netsh advfirewall firewall add rule name=WarframePairBlockPort protocol=UDP dir=out localport={WFPORT[0]}-{WFPORT[1]} action=block", shell=False)
+        status = subprocess.run(F"netsh advfirewall firewall add rule name=WarframePairBlockPort protocol=UDP dir=out localport={WFPORT[0]}-{WFPORT[1]} action=block", shell=True)
         if status.returncode == 0:
-            subprocess.run("netsh advfirewall firewall set rule name=WarframePairBlockPort new enable=yes", shell=False)
+            subprocess.run("netsh advfirewall firewall set rule name=WarframePairBlockPort new enable=yes", shell=True)
         elif status.returncode == 1:
             messagebox.showinfo('訊息', '請用系統管理員身分執行程式')
         rule_status()
         
     def del_rule():
-        status = subprocess.run("netsh advfirewall firewall delete rule name=WarframePairBlockPort", shell=False)
+        status = subprocess.run("netsh advfirewall firewall delete rule name=WarframePairBlockPort", shell=True)
         if status.returncode == 0:
             rule_status()
         elif status.returncode == 1:
