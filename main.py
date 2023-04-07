@@ -5,8 +5,8 @@ import subprocess, ctypes, sys, os, win32api
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.geometry('250x325')
-        self.title('WarframePairBlockTool')
+        self.geometry("250x325")
+        self.title("WarframePairBlockTool")
         self.my_font = ctk.CTkFont(family="Microsoft JhengHei", size=14) 
 
         self.headerLabel = ctk.CTkLabel(self, text="Warframe 配對限制器(強制主機)\n[封鎖UDP輸出埠]", font=self.my_font)
