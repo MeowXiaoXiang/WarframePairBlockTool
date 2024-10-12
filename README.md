@@ -1,6 +1,6 @@
 # **WarframePairBlockTool**
 
-![Python 3.10](https://img.shields.io/badge/Python-3.10-blue?logo=python) ![License MIT](https://img.shields.io/badge/License-MIT-green) ![Version v2.3](https://img.shields.io/badge/Version-v2.2-orange)
+![Python 3.10](https://img.shields.io/badge/Python-3.10-blue?logo=python) ![License MIT](https://img.shields.io/badge/License-MIT-green) ![Version v2.3](https://img.shields.io/badge/Version-v2.3-orange)
 
 透過限制特定 UDP 端口輸出來強制成為主機，避免加入其他玩家的主機，確保你成為遊戲的主機。
 
