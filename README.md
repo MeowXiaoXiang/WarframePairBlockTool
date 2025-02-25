@@ -1,6 +1,6 @@
 # **WarframePairBlockTool**
 
-![Python 3.10](https://img.shields.io/badge/Python-3.10-blue?logo=python) ![License MIT](https://img.shields.io/badge/License-MIT-green) ![Version v2.3](https://img.shields.io/badge/Version-v2.3-orange)
+![Python 3.10](https://img.shields.io/badge/Python-3.10-blue?logo=python) ![License MIT](https://img.shields.io/badge/License-MIT-green) ![Version v2.3.1](https://img.shields.io/badge/Version-v2.3.1-orange)
 
 透過限制特定 UDP 端口輸出來強制成為主機，避免加入其他玩家的主機，確保你成為遊戲的主機。
 
@@ -8,7 +8,7 @@
 
 ## 📥 **下載**
 
-👉 [**Windows 執行檔 點我下載**](https://github.com/MeowXiaoXiang/WarframePairBlockTool/releases/download/v2.3/WarframePairBlockTool.exe "下載 v2.3 版本")
+👉 [**Windows 執行檔 點我下載**](https://github.com/MeowXiaoXiang/WarframePairBlockTool/releases/download/v2.3.1/WarframePairBlockTool_v2.3.1.exe "下載 v2.3.1 版本")
 
 ## 📋 **功能特色**
 
