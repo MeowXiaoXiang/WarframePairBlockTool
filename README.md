@@ -60,7 +60,7 @@
 2. **打包程式**：在專案根目錄下輸入以下指令：
 
    ```bash
-   pyinstaller build.spec
+   pyinstaller build.spec --noconfirm --clean
    ```
 
 3. **查看打包結果**：
