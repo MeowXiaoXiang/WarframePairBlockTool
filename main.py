@@ -25,9 +25,18 @@ def get_resource_path(relative_path):
         return os.path.join(sys._MEIPASS, relative_path)
     return os.path.join(get_base_dir(), relative_path)
 
+def get_app_data_dir():
+    """取得應用程式資料目錄 (AppData/Roaming)"""
+    app_data = os.path.join(os.getenv('APPDATA'), "WarframePairBlockTool")
+    # 確保目錄存在
+    if not os.path.exists(app_data):
+        os.makedirs(app_data)
+    return app_data
+
 BASE_DIR = get_base_dir()
-CONFIG_PATH = os.path.join(BASE_DIR, "WarframePairBlockTool.ini")
-LOG_PATH = os.path.join(BASE_DIR, "WarframePairBlockTool.log")
+APP_DATA_DIR = get_app_data_dir()
+CONFIG_PATH = os.path.join(APP_DATA_DIR, "WarframePairBlockTool.ini")
+LOG_PATH = os.path.join(APP_DATA_DIR, "WarframePairBlockTool.log")
 ICON_PATH = get_resource_path("assets/logo.ico")
 BLOCKED_ICON_PATH = get_resource_path("assets/logo_blocked.ico")
 
@@ -558,20 +567,18 @@ class AppController:
         QApplication.quit()
 
 def set_logger():
-    """初始化 Loguru，固定輸出到 exe 同層 log 檔案（支援打包）"""
-
-    # 定位 log 檔案的絕對路徑
-    if getattr(sys, 'frozen', False):
-        base_path = os.path.dirname(sys.executable)
-    else:
-        base_path = os.path.dirname(os.path.abspath(__file__))
-
-    log_filename = "WarframePairBlockTool.log"
-    abs_log_path = os.path.join(base_path, log_filename)
-
+    """初始化 Loguru，設定輸出到 AppData/Roaming 目錄（支援打包）"""
+    
+    log_filename = LOG_PATH  # 使用全局變數中定義的路徑
+    
+    # 確保日誌目錄存在
+    log_dir = os.path.dirname(log_filename)
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+    
     # 清空舊內容（保證每次啟動乾淨）
     try:
-        with open(abs_log_path, "w", encoding="utf-8") as f:
+        with open(log_filename, "w", encoding="utf-8") as f:
             f.write("")  # 寫入空字符串而非不帶參數調用
     except Exception as e:
         print(f"[Loguru] 無法清空 log 檔案：{e}")
@@ -592,13 +599,13 @@ def set_logger():
 
     # 加入 log 檔案輸出（INFO 級）
     logger.add(
-        abs_log_path,
+        log_filename,
         level="INFO",
         format="{time:YYYY-MM-DD HH:mm:ss} | {level:<8} | {file}:{function}:{line} - {message}",
         encoding="utf-8"
     )
 
-    print(f"[Loguru] Log 初始化完成，輸出位置：{abs_log_path}")
+    print(f"[Loguru] Log 初始化完成，輸出位置：{log_filename}")
 
 if __name__ == "__main__":
     # 初始化 loguru
