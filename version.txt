@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(3, 0, 0, 0),
-    prodvers=(3, 0, 0, 0),
+    filevers=(3, 1, 0, 0),
+    prodvers=(3, 1, 0, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -16,12 +16,12 @@ VSVersionInfo(
         [
           StringStruct('CompanyName', 'XiaoXiang_Meow'),
           StringStruct('FileDescription', 'Warframe 配對阻斷器'),
-          StringStruct('FileVersion', '3.0.0'),
+          StringStruct('FileVersion', '3.1.0'),
           StringStruct('InternalName', 'WarframePairBlockTool'),
-          StringStruct('LegalCopyright', 'Copyright © 2025 XiaoXiang_Meow'),
+          StringStruct('LegalCopyright', 'Copyright © 2022-2026 XiaoXiang_Meow'),
           StringStruct('OriginalFilename', 'WarframePairBlockTool.exe'),
           StringStruct('ProductName', 'Warframe 配對阻斷器'),
-          StringStruct('ProductVersion', '3.0.0')
+          StringStruct('ProductVersion', '3.1.0')
         ]
       )
     ]),
