@@ -1,16 +1,17 @@
 import os
 import sys
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QUrl, QEvent, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QFont, QCursor, QDesktopServices, QColor, QPalette
 from PySide6.QtSvgWidgets import QSvgWidget
 from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QComboBox, QPushButton, QCheckBox, QSpinBox,
-    QGraphicsDropShadowEffect, 
+    QGraphicsDropShadowEffect, QGraphicsColorizeEffect,
 )
 
 from loguru import logger
+from src.ui.checkbox import checkbox_style
 
 if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -19,7 +20,6 @@ if __name__ == "__main__":
         sys.path.insert(0, project_root)
 
 
-# 可點擊 SVG Icon
 class ClickableSvgWidget(QSvgWidget):
     """
     可點擊的 SVG 圖示元件。
@@ -31,8 +31,37 @@ class ClickableSvgWidget(QSvgWidget):
         self.url = url
         self.callback = callback
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self._hover_effect = QGraphicsColorizeEffect(self)
+        self._hover_effect.setStrength(1)
+        self._base_color = QApplication.palette().color(QPalette.ColorRole.WindowText)
+        self._hover_color = QApplication.palette().color(QPalette.ColorRole.Highlight).lighter(135)
+        self._hover_effect.setColor(self._base_color)
+        self.setGraphicsEffect(self._hover_effect)
+        self._hover_animation = QPropertyAnimation(self._hover_effect, b"color", self)
+        self._hover_animation.setDuration(150)
+        self._hover_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         if tooltip:
             self.setToolTip(tooltip)
+
+    def set_theme_colors(self, base_color, hover_color):
+        self._hover_animation.stop()
+        self._base_color = base_color
+        self._hover_color = hover_color.lighter(135)
+        self._hover_effect.setColor(self._hover_color if self.underMouse() else self._base_color)
+
+    def _animate_hover(self, color):
+        self._hover_animation.stop()
+        self._hover_animation.setStartValue(self._hover_effect.color())
+        self._hover_animation.setEndValue(color)
+        self._hover_animation.start()
+
+    def enterEvent(self, event):
+        self._animate_hover(self._hover_color)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self._animate_hover(self._base_color)
+        super().leaveEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -75,26 +104,15 @@ class WarframeMainUI(QWidget):
         }
         self.current_state = "STATE_NORMAL"
         self.is_focused = False
+        self._theme_palette_key = None
         self.init_ui()
 
     def init_ui(self):
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setFixedSize(275, 300)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)  # 讓視窗可以獲得焦點
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
-        # 獲取系統調色板
-        palette = QApplication.palette()
-        card_bg_color = palette.color(QPalette.ColorRole.Window)
-        card_border_color = palette.color(QPalette.ColorRole.Mid)
-        text_color = palette.color(QPalette.ColorRole.WindowText)
-        input_bg_color = palette.color(QPalette.ColorRole.Base)
-        input_border_color = palette.color(QPalette.ColorRole.Dark)
-        highlight_color = palette.color(QPalette.ColorRole.Highlight)
-        button_hover_bg = highlight_color.lighter(120)
-        button_pressed_bg = highlight_color
-
-        # 使用更好的陰影效果
         self.shadow = QGraphicsDropShadowEffect()
         self.shadow.setBlurRadius(12)
         self.shadow.setColor(QColor(0, 0, 0, 30))
@@ -103,13 +121,6 @@ class WarframeMainUI(QWidget):
         self.card = QWidget()
         self.card.setGraphicsEffect(self.shadow)
         self.card.setObjectName("card")
-        self.card.setStyleSheet(f"""
-            QWidget#card {{
-                background-color: {card_bg_color.name()};
-                border-radius: 32px;
-                border: 1px solid {card_border_color.name()};
-            }}
-        """)
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(10, 10, 10, 10)
         outer_layout.addWidget(self.card)
@@ -120,7 +131,6 @@ class WarframeMainUI(QWidget):
 
         font = QFont("Microsoft JhengHei", 9)
 
-        # Title Bar
         title_bar = QHBoxLayout()
         self.logo = QSvgWidget(self.resolve_path("assets/logo.svg"))
         self.logo.setFixedSize(26, 26)
@@ -133,11 +143,142 @@ class WarframeMainUI(QWidget):
 
         minimize_btn = QPushButton("−")
         close_btn = QPushButton("×")
+        self._caption_buttons = (minimize_btn, close_btn)
+        minimize_btn.setToolTip("最小化至工作列")
+        close_btn.setToolTip("隱藏至系統匣")
         
         for btn in (minimize_btn, close_btn):
             btn.setFixedSize(26, 26)
             btn.setFont(QFont("Arial", 15))
             btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        minimize_btn.clicked.connect(self.showMinimized)
+        close_btn.clicked.connect(self.close)
+        title_bar.addWidget(minimize_btn)
+        title_bar.addWidget(close_btn)
+        main_layout.addLayout(title_bar)
+
+        udp_layout = QVBoxLayout()
+        udp_label = QLabel("選擇您 Warframe 內的 UDP 埠")
+        udp_label.setFont(font)
+        udp_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        udp_label.setFixedHeight(14)
+        udp_layout.addWidget(udp_label)
+
+        self.combo = QComboBox()
+        self.combo.setFont(font)
+        self.combo.addItems([
+            "4950 & 4955", "4960 & 4965", "4970 & 4975",
+            "4980 & 4985", "4990 & 4995", "3074 & 3080"
+        ])
+        udp_layout.addWidget(self.combo)
+        main_layout.addLayout(udp_layout)
+
+        auto_recover_layout = QHBoxLayout()
+        auto_recover_layout.setSpacing(6)
+        auto_recover_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+
+        self.auto_recover_checkbox = QCheckBox("自動恢復配對（秒）")
+        self.auto_recover_checkbox.setFont(font)
+        self.auto_recover_checkbox.setChecked(True)
+        self.auto_recover_checkbox.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.auto_recover_checkbox.stateChanged.connect(self._on_auto_recover_toggled)
+
+        self.recover_spinbox = QSpinBox()
+        self.recover_spinbox.setFont(font)
+        self.recover_spinbox.setRange(1, 999)
+        self.recover_spinbox.setValue(20)
+        self.recover_spinbox.setFixedWidth(60)
+        self.recover_spinbox.setEnabled(True)
+
+        auto_recover_layout.addWidget(self.auto_recover_checkbox)
+        auto_recover_layout.addWidget(self.recover_spinbox)
+        main_layout.addLayout(auto_recover_layout)
+
+        main_layout.addSpacing(8)
+
+        control_layout = QVBoxLayout()
+        self.toggle_btn = QPushButton("配對正常")
+        self.toggle_btn.setFont(QFont("Microsoft JhengHei", 9, QFont.Weight.Bold))
+        self.toggle_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.toggle_btn.setCheckable(True)
+        self.toggle_btn.setMinimumHeight(36)
+        self.toggle_btn.setStyleSheet(self.get_toggle_style(False))
+        self.toggle_btn.clicked.connect(self.toggle_status)
+        control_layout.addWidget(self.toggle_btn)
+
+        control_layout.addSpacing(16)
+
+        self.firewall_btn = QPushButton("查看防火牆")
+        self.firewall_btn.setFont(font)
+        self.firewall_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.firewall_btn.setMinimumHeight(32)
+        self.firewall_btn.clicked.connect(self._on_firewall_clicked)
+        control_layout.addWidget(self.firewall_btn)
+        main_layout.addLayout(control_layout)
+
+        main_layout.addSpacing(12)
+        main_layout.addStretch()
+
+        footer_layout = QHBoxLayout()
+        footer_layout.setContentsMargins(4, 2, 4, 4)
+        footer_layout.setSpacing(6)
+
+        self.settings_icon = ClickableSvgWidget(
+            self.resolve_path("assets/settings.svg"),
+            callback=self._on_settings_clicked,
+            tooltip="開啟設定"
+        )
+        self.settings_icon.setFixedSize(18, 18)
+        footer_layout.addWidget(self.settings_icon)
+
+        author_widget = QWidget()
+        author_layout = QVBoxLayout()
+        author_layout.setContentsMargins(0, 0, 0, 0)
+        author_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        author_label = QLabel("開發者：小翔\nDiscord: xiaoxiang_meow")
+        author_label.setFont(QFont("Microsoft JhengHei", 8))
+        author_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        author_layout.addWidget(author_label)
+        author_widget.setLayout(author_layout)
+
+        footer_layout.addWidget(author_widget, stretch=1)
+
+        self.github_icon = ClickableSvgWidget(
+            self.resolve_path("assets/github.svg"),
+            url="https://github.com/MeowXiaoXiang/WarframePairBlockTool",
+            tooltip="前往 GitHub"
+        )
+        self.github_icon.setFixedSize(18, 18)
+        footer_layout.addWidget(self.github_icon)
+
+        main_layout.addLayout(footer_layout)
+        self._apply_theme()
+
+    def _apply_theme(self):
+        palette = QApplication.palette()
+        self._theme_palette_key = palette.cacheKey()
+        self.auto_recover_checkbox.setStyleSheet(checkbox_style(palette))
+        card_bg_color = palette.color(QPalette.ColorRole.Window)
+        card_border_color = palette.color(QPalette.ColorRole.Mid)
+        text_color = palette.color(QPalette.ColorRole.WindowText)
+        input_bg_color = palette.color(QPalette.ColorRole.Base)
+        input_border_color = palette.color(QPalette.ColorRole.Dark)
+        highlight_color = palette.color(QPalette.ColorRole.Highlight)
+        self.settings_icon.set_theme_colors(text_color, highlight_color)
+        self.github_icon.set_theme_colors(text_color, highlight_color)
+        button_hover_bg = highlight_color.lighter(120)
+        button_pressed_bg = highlight_color
+
+        self.card.setStyleSheet(f"""
+            QWidget#card {{
+                background-color: {card_bg_color.name()};
+                border-radius: 32px;
+                border: 1px solid {card_border_color.name()};
+            }}
+        """)
+
+        for btn in self._caption_buttons:
             btn.setStyleSheet(f"""
                 QPushButton {{
                     background-color: transparent;
@@ -152,29 +293,8 @@ class WarframeMainUI(QWidget):
                     background-color: {button_pressed_bg.name()};
                 }}
             """)
-        minimize_btn.clicked.connect(self.showMinimized)
-        close_btn.clicked.connect(self.close)
-        title_bar.addWidget(minimize_btn)
-        title_bar.addWidget(close_btn)
-        main_layout.addLayout(title_bar)
 
-        # UDP Port Selection
-        udp_layout = QVBoxLayout()
-        udp_label = QLabel("選擇您 Warframe 內的 UDP 埠")
-        udp_label.setFont(font)
-        udp_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        udp_label.setFixedHeight(14)
-        udp_layout.addWidget(udp_label)
-
-        self.combo = QComboBox()
-        self.combo.setFont(font)
-        self.combo.addItems([
-            "4950 & 4955", "4960 & 4965", "4970 & 4975",
-            "4980 & 4985", "4990 & 4995", "3074 & 3080"
-        ])
-        # 獲取 arrow_down 圖片路徑並處理反斜線
         arrow_down_path = self.resolve_path("assets/arrow_down.svg").replace("\\", "/")
-        
         self.combo.setStyleSheet(f"""
             QComboBox {{
                 padding: 6px 10px;
@@ -202,6 +322,7 @@ class WarframeMainUI(QWidget):
                 selection-background-color: {highlight_color.name()};
                 selection-color: {palette.color(QPalette.ColorRole.HighlightedText).name()};
                 background-color: {input_bg_color.name()};
+                color: {palette.color(QPalette.ColorRole.Text).name()};
                 padding: 4px;
                 outline: none;
             }}
@@ -210,27 +331,6 @@ class WarframeMainUI(QWidget):
                 padding: 4px 10px;
             }}
         """)
-
-        udp_layout.addWidget(self.combo)
-        main_layout.addLayout(udp_layout)
-
-        # 自動恢復區塊
-        auto_recover_layout = QHBoxLayout()
-        auto_recover_layout.setSpacing(6)
-        auto_recover_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-
-        self.auto_recover_checkbox = QCheckBox("自動恢復配對（秒）")
-        self.auto_recover_checkbox.setFont(font)
-        self.auto_recover_checkbox.setChecked(True)
-        self.auto_recover_checkbox.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.auto_recover_checkbox.stateChanged.connect(self._on_auto_recover_toggled)
-
-        self.recover_spinbox = QSpinBox()
-        self.recover_spinbox.setFont(font)
-        self.recover_spinbox.setRange(1, 999)
-        self.recover_spinbox.setValue(20)
-        self.recover_spinbox.setFixedWidth(60)
-        self.recover_spinbox.setEnabled(True)
 
         up_path = self.resolve_path("assets/arrow_up.svg").replace("\\", "/")
         down_path = self.resolve_path("assets/arrow_down.svg").replace("\\", "/")
@@ -259,30 +359,6 @@ class WarframeMainUI(QWidget):
             }}
         """)
 
-        auto_recover_layout.addWidget(self.auto_recover_checkbox)
-        auto_recover_layout.addWidget(self.recover_spinbox)
-        main_layout.addLayout(auto_recover_layout)
-
-        main_layout.addSpacing(8)
-
-        # Control Buttons
-        control_layout = QVBoxLayout()
-        self.toggle_btn = QPushButton("配對正常")
-        self.toggle_btn.setFont(QFont("Microsoft JhengHei", 9, QFont.Weight.Bold))
-        self.toggle_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.toggle_btn.setCheckable(True)
-        self.toggle_btn.setMinimumHeight(36)
-        self.toggle_btn.setStyleSheet(self.get_toggle_style(False))
-        self.toggle_btn.clicked.connect(self.toggle_status)
-        control_layout.addWidget(self.toggle_btn)
-
-        # 在按鈕間添加間隔
-        control_layout.addSpacing(16)
-
-        self.firewall_btn = QPushButton("查看防火牆")
-        self.firewall_btn.setFont(font)
-        self.firewall_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.firewall_btn.setMinimumHeight(32)
         self.firewall_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: {input_bg_color.name()};
@@ -297,56 +373,20 @@ class WarframeMainUI(QWidget):
                 background-color: {button_pressed_bg.name()};
             }}
         """)
-        self.firewall_btn.clicked.connect(self._on_firewall_clicked)
-        control_layout.addWidget(self.firewall_btn)
-        main_layout.addLayout(control_layout)
 
-        main_layout.addSpacing(12)
-        main_layout.addStretch()
-
-        # Footer
-        footer_layout = QHBoxLayout()
-        footer_layout.setContentsMargins(4, 2, 4, 4)
-        footer_layout.setSpacing(6)
-
-        settings_icon = ClickableSvgWidget(
-            self.resolve_path("assets/settings.svg"),
-            callback=self._on_settings_clicked,
-            tooltip="開啟設定"
-        )
-        settings_icon.setFixedSize(18, 18)
-        footer_layout.addWidget(settings_icon)
-
-        author_widget = QWidget()
-        author_layout = QVBoxLayout()
-        author_layout.setContentsMargins(0, 0, 0, 0)
-        author_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        author_label = QLabel("開發者：小翔\nDiscord: xiaoxiang_meow")
-        author_label.setFont(QFont("Microsoft JhengHei", 8))
-        author_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        author_layout.addWidget(author_label)
-        author_widget.setLayout(author_layout)
-
-        footer_layout.addWidget(author_widget, stretch=1)
-
-        github_icon = ClickableSvgWidget(
-            self.resolve_path("assets/github.svg"),
-            url="https://github.com/MeowXiaoXiang/WarframePairBlockTool",
-            tooltip="前往 GitHub"
-        )
-        github_icon.setFixedSize(18, 18)
-        footer_layout.addWidget(github_icon)
-
-        main_layout.addLayout(footer_layout)
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if (event.type() == QEvent.Type.PaletteChange
+                and hasattr(self, "firewall_btn")
+                and self._theme_palette_key != QApplication.palette().cacheKey()):
+            self._apply_theme()
 
     def _on_firewall_clicked(self):
         if self.open_firewall_callback:
             self.open_firewall_callback()
 
     def get_toggle_style(self, checked):
-        # 狀態切換按鈕使用固定的白色文字，但保留紅綠色調
-        # 紅/綠主色和深淺變體
+        # 狀態色固定為紅／綠，避免系統主題切換改變按鈕語意。
         if checked:  # 阻斷狀態 - 紅色
             main_color = "#B22222"
             hover_color = "#cc4444" 
@@ -358,7 +398,7 @@ class WarframeMainUI(QWidget):
             
         return f"""
             QPushButton {{
-                color: white;  /* 固定使用白色文字 */
+                color: white;
                 background-color: {main_color};
                 border: none;
                 border-radius: 18px;
@@ -391,7 +431,12 @@ class WarframeMainUI(QWidget):
         text = self.state_labels.get(state_code, "未知狀態")
         self.toggle_btn.setChecked(checked)
         self.toggle_btn.setText(text)
-        self.toggle_btn.setStyleSheet(self.get_toggle_style(checked))
+        if state_code == "STATE_UNKNOWN":
+            self.toggle_btn.setToolTip("無法確認狀態；按此重新檢查")
+            self.toggle_btn.setStyleSheet("QPushButton { color: white; background: #69717a; border: none; border-radius: 18px; } QPushButton:hover { background: #7b848d; }")
+        else:
+            self.toggle_btn.setToolTip("")
+            self.toggle_btn.setStyleSheet(self.get_toggle_style(checked))
 
     def get_selected_udp_ports(self) -> str:
         return self.combo.currentText()
@@ -438,7 +483,7 @@ class WarframeMainUI(QWidget):
             allowed_widgets = (self.card, self.title, self.logo)
             if widget in allowed_widgets or widget.parent() in allowed_widgets:
                 self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-                self.setFocus()  # 滑鼠點擊時獲得焦點
+                self.setFocus()
             else:
                 self.drag_position = None
         
@@ -504,7 +549,7 @@ if __name__ == "__main__":
     )
 
     window.set_toggle_state(random.choice(["STATE_BLOCKED", "STATE_NORMAL"]))
-    window.set_selected_udp_index(2)  # 預設選擇 "4970 & 4975"
+    window.set_selected_udp_index(2)
     window.set_auto_recover_enabled(False)
     window.set_auto_recover_time(99)
 

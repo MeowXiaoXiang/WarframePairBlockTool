@@ -1,6 +1,4 @@
-"""
-Controller 模組 - 提供防火牆規則管理功能
-"""
+"""防火牆規則管理。"""
 
 from .firewall import (
     FirewallController,
