@@ -96,6 +96,12 @@ class AppFlowTests(unittest.TestCase):
                 def setText(self, *_):
                     pass
 
+                def setInformativeText(self, *_):
+                    pass
+
+                def setDetailedText(self, *_):
+                    pass
+
                 def addButton(self, text, *_):
                     self.buttons[text] = object()
                     return self.buttons[text]

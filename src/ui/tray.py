@@ -75,7 +75,7 @@ class TrayManager(QObject):
             self._apply_menu_theme()
             menu.setMinimumWidth(160)
             
-            self.status_action = QAction("🟢 配對狀態：正常連線", self.parent_window)
+            self.status_action = QAction("🟢 配對阻斷：已解除", self.parent_window)
             self.status_action.setEnabled(False)
             menu.addAction(self.status_action)
             menu.addSeparator()
@@ -88,7 +88,7 @@ class TrayManager(QObject):
             settings_action.triggered.connect(self.open_settings_signal.emit)
             menu.addAction(settings_action)
             
-            self.toggle_action = QAction("切換為阻斷配對", self.parent_window)
+            self.toggle_action = QAction("阻斷配對", self.parent_window)
             self.toggle_action.triggered.connect(lambda: self.toggle_firewall_signal.emit(False))
             menu.addAction(self.toggle_action)
             
@@ -165,16 +165,16 @@ class TrayManager(QObject):
                 
             is_blocked = state is True or state == "STATE_BLOCKED"
             if state == "STATE_UNKNOWN":
-                self.status_action.setText("⚪ 防火牆狀態：無法確認")
+                self.status_action.setText("⚪ 配對阻斷：無法確認")
                 self.toggle_action.setText("重新檢查")
                 new_icon = self._icon_normal
             elif is_blocked:
-                self.status_action.setText("🔴 配對狀態：已阻斷")
-                self.toggle_action.setText("切換為正常配對")
+                self.status_action.setText("🔴 配對阻斷：已啟用")
+                self.toggle_action.setText("解除阻斷")
                 new_icon = self._icon_blocked
             else:
-                self.status_action.setText("🟢 配對狀態：正常連線")
-                self.toggle_action.setText("切換為阻斷配對")
+                self.status_action.setText("🟢 配對阻斷：已解除")
+                self.toggle_action.setText("阻斷配對")
                 new_icon = self._icon_normal
             self.toggle_action.setEnabled(not busy)
             

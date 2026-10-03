@@ -158,7 +158,7 @@ class WarframeMainUI(QWidget):
         main_layout.addLayout(title_bar)
 
         udp_layout = QVBoxLayout()
-        udp_label = QLabel("選擇您 Warframe 內的 UDP 埠")
+        udp_label = QLabel("選擇遊戲內設定的 UDP 埠")
         udp_label.setFont(font)
         udp_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         udp_label.setFixedHeight(14)
@@ -178,6 +178,7 @@ class WarframeMainUI(QWidget):
         auto_recover_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
         self.auto_recover_checkbox = QCheckBox("自動恢復配對（秒）")
+        self.auto_recover_checkbox.setToolTip("啟用後，在指定秒數後自動解除 UDP 封鎖")
         self.auto_recover_checkbox.setFont(font)
         self.auto_recover_checkbox.setChecked(True)
         self.auto_recover_checkbox.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
@@ -432,10 +433,12 @@ class WarframeMainUI(QWidget):
         self.toggle_btn.setChecked(checked)
         self.toggle_btn.setText(text)
         if state_code == "STATE_UNKNOWN":
-            self.toggle_btn.setToolTip("無法確認狀態；按此重新檢查")
+            self.toggle_btn.setToolTip("無法確認 UDP 封鎖狀態；按此重新檢查")
             self.toggle_btn.setStyleSheet("QPushButton { color: white; background: #69717a; border: none; border-radius: 18px; } QPushButton:hover { background: #7b848d; }")
         else:
-            self.toggle_btn.setToolTip("")
+            self.toggle_btn.setToolTip(
+                "所選 UDP 輸出已封鎖；按此解除阻斷" if checked
+                else "未發現本工具的封鎖規則；按此阻斷配對")
             self.toggle_btn.setStyleSheet(self.get_toggle_style(checked))
 
     def get_selected_udp_ports(self) -> str:

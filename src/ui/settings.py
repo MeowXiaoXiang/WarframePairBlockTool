@@ -146,7 +146,8 @@ class SettingsUI(QWidget):
             title_bar.addWidget(self.close_btn)
             layout.addLayout(title_bar)
 
-            self.notify_checkbox = QCheckBox("啟用 Windows 通知")
+            self.notify_checkbox = QCheckBox("顯示 Windows 通知")
+            self.notify_checkbox.setToolTip("控制本工具的系統匣通知")
             self.notify_checkbox.setFont(font)
             self.notify_checkbox.setChecked(True)
             self.notify_checkbox.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
@@ -157,13 +158,14 @@ class SettingsUI(QWidget):
             
             layout.addWidget(self.notify_checkbox)
 
-            layout.addWidget(QLabel("設定快捷鍵（按下按鈕後輸入）", font=font))
+            layout.addWidget(QLabel("配對切換快捷鍵", font=font))
 
             self.hotkey_display = QLabel("目前設定：無")
             self.hotkey_display.setFont(font)
             layout.addWidget(self.hotkey_display)
 
-            self.hotkey_btn = QPushButton("點此設定快捷鍵")
+            self.hotkey_btn = QPushButton("設定快捷鍵")
+            self.hotkey_btn.setToolTip("按下後輸入快捷鍵；可按 Esc 取消，15 秒後自動取消")
             self.hotkey_btn.setFont(font)
             self.hotkey_btn.setCursor(QCursor(Qt.PointingHandCursor))
             self.hotkey_btn.clicked.connect(self._start_hotkey_capture)
@@ -173,7 +175,7 @@ class SettingsUI(QWidget):
             danger_hover_color = "#cc4444"
             danger_pressed_color = "#a11a1a"
             
-            clear_btn = QPushButton("清除所有設定")
+            clear_btn = QPushButton("還原預設設定")
             clear_btn.setFont(font)
             clear_btn.setCursor(QCursor(Qt.PointingHandCursor))
             clear_btn.setStyleSheet(f"""
@@ -276,19 +278,19 @@ class SettingsUI(QWidget):
             if self.capture_start_callback:
                 self.capture_start_callback()
             self.hotkey_btn.setText("取消設定（Esc）")
-            self.hotkey_display.setText("目前設定：偵測中...")
+            self.hotkey_display.setText("請按下快捷鍵（Esc 取消）")
             self.hotkey_capturer.start_capture()
         except Exception as e:
             logger.error(f"啟動快捷鍵捕獲時發生錯誤: {e}")
             if self.capture_end_callback:
                 self.capture_end_callback()
             self.hotkey_display.setText(self._previous_hotkey_text)
-            self.hotkey_btn.setText("點此設定快捷鍵")
+            self.hotkey_btn.setText("設定快捷鍵")
     
     def _on_hotkey_captured(self, hotkey):
         """當快捷鍵被捕獲時處理（在UI線程中執行）"""
         try:
-            self.hotkey_btn.setText("點此設定快捷鍵")
+            self.hotkey_btn.setText("設定快捷鍵")
             if not hotkey:
                 self.hotkey_display.setText(self._previous_hotkey_text)
                 if self.capture_end_callback:
@@ -303,23 +305,25 @@ class SettingsUI(QWidget):
         except Exception as e:
             logger.error(f"處理捕獲到的快捷鍵時發生錯誤: {e}")
             self.hotkey_display.setText(self._previous_hotkey_text)
-            self.hotkey_btn.setText("點此設定快捷鍵")
+            self.hotkey_btn.setText("設定快捷鍵")
             if self.capture_end_callback:
                 self.capture_end_callback()
 
     def _on_clear_clicked(self):
         try:
-            logger.debug("用戶點擊清除所有設定按鈕")
-            if QMessageBox.question(self, "確認清除", "確定要刪除所有設定嗎？") == QMessageBox.Yes:
-                logger.info("用戶確認清除所有設定")
+            logger.debug("使用者點擊還原預設設定按鈕")
+            if QMessageBox.question(
+                    self, "還原預設設定",
+                    "確定要還原預設設定嗎？\nUDP 埠、自動恢復及通知將恢復預設值，快捷鍵將被移除。") == QMessageBox.Yes:
+                logger.info("使用者確認還原預設設定")
                 if self.clear_config_callback:
                     self.clear_config_callback()
                 self.hotkey_display.setText("目前設定：無")
                 self.notify_checkbox.setChecked(True)
-                QMessageBox.information(self, "完成", "設定已清除！")
+                QMessageBox.information(self, "完成", "設定已還原為預設值。")
         except Exception as e:
-            logger.error(f"清除設定時發生錯誤: {e}")
-            QMessageBox.warning(self, "錯誤", f"清除設定時發生錯誤: {e}")
+            logger.error(f"還原預設設定失敗：{e}")
+            QMessageBox.warning(self, "無法還原設定", f"還原預設設定失敗：{e}")
 
     def updateShadow(self, focused: bool):
         """更新視窗陰影效果"""

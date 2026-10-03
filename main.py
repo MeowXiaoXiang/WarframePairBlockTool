@@ -209,9 +209,9 @@ class AppController(QObject):
             self._set_state("STATE_BLOCKED" if state == "blocked" else "STATE_NORMAL")
             if self._operation_source_hotkey and self.notifications_enabled and operation in ("create", "delete"):
                 self.tray.show_message(
-                    "配對已阻斷" if operation == "create" else "配對已恢復",
+                    "配對已阻斷" if operation == "create" else "已解除阻斷",
                     f"UDP 埠 {self._ports()[0]}、{self._ports()[1]} 已封鎖" if operation == "create"
-                    else "UDP 配對封鎖已解除",
+                    else "UDP 輸出封鎖已解除",
                     icon=QIcon(BLOCKED_ICON_PATH if operation == "create" else ICON_PATH),
                 )
             if operation == "create" and self.window.is_auto_recover_enabled():
@@ -338,7 +338,7 @@ class AppController(QObject):
         event.ignore()
         self.window.hide()
         if self.notifications_enabled:
-            self.tray.show_message("Warframe 配對阻斷器", "程式仍在系統匣執行，可從系統匣結束。")
+            self.tray.show_message("Warframe 配對阻斷器", "程式仍在系統匣執行。按右鍵選擇「結束程式」即可結束。")
 
     def _show_error(self, message):
         logger.error(message)
@@ -357,7 +357,9 @@ class AppController(QObject):
         box = QMessageBox(self.window)
         box.setIcon(QMessageBox.Icon.Warning)
         box.setWindowTitle("無法清理防火牆規則")
-        box.setText(f"無法確認同名規則已刪除：{error}")
+        box.setText("無法確認本工具的封鎖規則已刪除。")
+        box.setInformativeText("封鎖可能尚未解除。仍要退出的話，之後可能需要手動解除。")
+        box.setDetailedText(error)
         retry = box.addButton("重試", QMessageBox.ButtonRole.AcceptRole)
         exit_anyway = box.addButton("仍要退出", QMessageBox.ButtonRole.DestructiveRole)
         box.addButton("取消", QMessageBox.ButtonRole.RejectRole)
