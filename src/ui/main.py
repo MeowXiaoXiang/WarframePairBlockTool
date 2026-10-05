@@ -295,7 +295,8 @@ class WarframeMainUI(QWidget):
                 }}
             """)
 
-        arrow_down_path = self.resolve_path("assets/arrow_down.svg").replace("\\", "/")
+        arrow_suffix = "_white" if text_color.lightness() > 127 else ""
+        arrow_down_path = self.resolve_path(f"assets/arrow_down{arrow_suffix}.svg").replace("\\", "/")
         self.combo.setStyleSheet(f"""
             QComboBox {{
                 padding: 6px 10px;
@@ -333,8 +334,8 @@ class WarframeMainUI(QWidget):
             }}
         """)
 
-        up_path = self.resolve_path("assets/arrow_up.svg").replace("\\", "/")
-        down_path = self.resolve_path("assets/arrow_down.svg").replace("\\", "/")
+        up_path = self.resolve_path(f"assets/arrow_up{arrow_suffix}.svg").replace("\\", "/")
+        down_path = arrow_down_path
         self.recover_spinbox.setStyleSheet(f"""
             QSpinBox {{
                 padding: 4px;
@@ -484,7 +485,7 @@ class WarframeMainUI(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             widget = self.childAt(event.position().toPoint())
             allowed_widgets = (self.card, self.title, self.logo)
-            if widget in allowed_widgets or widget.parent() in allowed_widgets:
+            if widget is not None and (widget in allowed_widgets or widget.parent() in allowed_widgets):
                 self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
                 self.setFocus()
             else:

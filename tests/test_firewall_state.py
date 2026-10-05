@@ -2,7 +2,7 @@ import json
 import subprocess
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from src.controller.firewall import (
     CommandExecutionError, FirewallController, RuleCreationError, RuleDeletionError,
@@ -124,6 +124,26 @@ class FirewallStateTests(unittest.TestCase):
         worker.completed.connect(lambda *args: results.append(args))
         worker.execute("startup", PORTS)
         self.assertEqual(results[0][:3], ("startup", True, "normal"))
+
+    def test_worker_reports_all_success_and_failure_operations(self):
+        for operation in ("startup", "check", "create", "delete", "quit", "reset"):
+            for failure in (False, True):
+                with self.subTest(operation=operation, failure=failure):
+                    fw = Mock(spec=FirewallController)
+                    fw.get_rule_status.return_value = "unknown" if failure else "blocked"
+                    fw.get_last_error.return_value = "query failed"
+                    if failure:
+                        fw.clear_rules.side_effect = RuleDeletionError("delete failed")
+                        fw.create_and_verify.side_effect = RuleCreationError("verify failed")
+                    worker = FirewallWorker(fw)
+                    results = []
+                    worker.completed.connect(lambda *args: results.append(args))
+                    worker.execute(operation, PORTS)
+                    expected = "blocked" if operation in ("check", "create") else "normal"
+                    self.assertEqual(len(results), 1)
+                    self.assertEqual(results[0][:3],
+                                     (operation, not failure, "unknown" if failure else expected))
+                    self.assertEqual(bool(results[0][3]), failure)
 
 
 if __name__ == "__main__":

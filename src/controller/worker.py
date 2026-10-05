@@ -18,7 +18,7 @@ class FirewallWorker(QObject):
         started = time.monotonic()
         try:
             logger.debug("防火牆作業開始：{} ports={}", operation, ports)
-            if operation in ("startup", "delete", "quit"):
+            if operation in ("startup", "delete", "quit", "reset"):
                 self.firewall.clear_rules()
                 state = "normal"
             elif operation == "create":

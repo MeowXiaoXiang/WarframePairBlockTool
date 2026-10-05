@@ -87,12 +87,19 @@ class AppController(QObject):
     def __init__(self, firewall=None):
         super().__init__()
         self.firewall = firewall or FirewallController()
-        self.config = configparser.ConfigParser()
+        self.config = configparser.ConfigParser(interpolation=None)
         self.notifications_enabled = True
         self.hotkey = ""
         self.settings_window = None
         self._loading = True
         self._busy = False
+        self._active_operation = None
+        self._active_ports = None
+        self._pending_action = None
+        self._recheck_requested = False
+        self._recover_due = False
+        self._reset_requested = False
+        self._startup_complete = False
         self._quitting = False
         self._quit_requested = False
         self._operation_source_hotkey = False
@@ -140,12 +147,28 @@ class AppController(QObject):
         self.worker.completed.connect(self._on_operation_complete)
         self.worker_thread.finished.connect(self.worker.deleteLater)
         self.worker_thread.start()
-        QTimer.singleShot(0, lambda: self._request("startup"))
+        self._request("startup")
 
     def _load_config(self):
-        self.config["Settings"] = dict(DEFAULTS)
-        if os.path.exists(CONFIG_PATH):
-            self.config.read(CONFIG_PATH, encoding="utf-8")
+        loaded = configparser.ConfigParser(interpolation=None)
+        loaded["Settings"] = dict(DEFAULTS)
+        try:
+            try:
+                with open(CONFIG_PATH, encoding="utf-8") as stream:
+                    loaded.read_file(stream)
+            except FileNotFoundError:
+                pass
+            settings = loaded["Settings"]
+            for key in ("udp_index", "recover_time"):
+                settings.getint(key)
+            for key in ("notifications", "auto_recover"):
+                settings.getboolean(key)
+            settings.get("hotkey")
+        except (OSError, UnicodeError, configparser.Error, ValueError) as exc:
+            logger.warning("無法讀取設定，改用預設值：{}", exc)
+            loaded = configparser.ConfigParser(interpolation=None)
+            loaded["Settings"] = dict(DEFAULTS)
+        self.config = loaded
         settings = self.config["Settings"]
         self.notifications_enabled = settings.getboolean("notifications", fallback=True)
         self.hotkey = settings.get("hotkey", "")
@@ -156,9 +179,19 @@ class AppController(QObject):
         settings = self.config["Settings"]
         self._loading = True
         try:
-            self.window.set_selected_udp_index(settings.getint("udp_index", fallback=0))
+            index = settings.getint("udp_index", fallback=0)
+            if not 0 <= index < self.window.combo.count():
+                logger.warning("UDP 選項索引無效，改用預設值：{}", index)
+                index = 0
+                settings["udp_index"] = DEFAULTS["udp_index"]
+            self.window.set_selected_udp_index(index)
             self.window.set_auto_recover_enabled(settings.getboolean("auto_recover", fallback=True))
-            self.window.set_auto_recover_time(settings.getint("recover_time", fallback=20))
+            seconds = settings.getint("recover_time", fallback=20)
+            if not self.window.recover_spinbox.minimum() <= seconds <= self.window.recover_spinbox.maximum():
+                logger.warning("自動恢復秒數無效，改用預設值：{}", seconds)
+                seconds = int(DEFAULTS["recover_time"])
+                settings["recover_time"] = str(seconds)
+            self.window.set_auto_recover_time(seconds)
         finally:
             self._loading = False
 
@@ -167,17 +200,17 @@ class AppController(QObject):
             self.save_timer.start()
 
     def _save_config(self):
-        settings = self.config["Settings"]
-        settings["udp_index"] = str(self.window.combo.currentIndex())
-        settings["auto_recover"] = str(self.window.is_auto_recover_enabled()).lower()
-        settings["recover_time"] = str(self.window.get_auto_recover_time())
-        settings["notifications"] = str(self.notifications_enabled).lower()
-        settings["hotkey"] = self.hotkey or ""
         try:
+            settings = self.config["Settings"]
+            settings["udp_index"] = str(self.window.combo.currentIndex())
+            settings["auto_recover"] = str(self.window.is_auto_recover_enabled()).lower()
+            settings["recover_time"] = str(self.window.get_auto_recover_time())
+            settings["notifications"] = str(self.notifications_enabled).lower()
+            settings["hotkey"] = self.hotkey or ""
             with open(CONFIG_PATH, "w", encoding="utf-8") as stream:
                 self.config.write(stream)
             logger.debug("設定已儲存")
-        except OSError as exc:
+        except (OSError, configparser.Error, ValueError) as exc:
             self._show_error(f"無法儲存設定：{exc}")
 
     def _ports(self):
@@ -186,64 +219,161 @@ class AppController(QObject):
     def _set_state(self, state):
         previous = self.window.current_state
         self.window.set_toggle_state(state)
-        self.window.toggle_btn.setEnabled(not self._busy)
-        self.window.combo.setEnabled(not self._busy and state != "STATE_BLOCKED")
-        self.tray.update_status(state, busy=self._busy)
+        unavailable = self._busy or self._quitting or self._quit_requested or self._reset_requested
+        self.window.toggle_btn.setEnabled(not unavailable)
+        self.window.combo.setEnabled(not unavailable and state != "STATE_BLOCKED")
+        self.tray.update_status(state, busy=unavailable)
         logger.debug("狀態轉移：{} -> {}，busy={}", previous, state, self._busy)
 
     def _request(self, operation):
         if self._busy:
             return False
+        if operation == "check" and not self._startup_complete:
+            operation = "startup"
         self._busy = True
-        if operation in ("startup", "quit"):
+        self._active_operation = operation
+        self._active_ports = self._ports()
+        if operation in ("startup", "quit", "reset"):
             self.auto_recover_timer.stop()
+            self._recover_due = False
         self.window.toggle_btn.setEnabled(False)
         self.window.combo.setEnabled(False)
         self.tray.update_status(self.window.current_state, busy=True)
-        self.dispatcher.requested.emit(operation, self._ports())
+        if operation in ("startup", "check"):
+            self._show_checking()
+        self.dispatcher.requested.emit(operation, self._active_ports)
         return True
 
+    def _show_checking(self):
+        action = self._pending_action[0] if self._pending_action else (
+            "delete" if self.window.current_state == "STATE_BLOCKED" else "create")
+        label = "解除" if action == "delete" else "阻斷"
+        pending = self._pending_action is not None
+        enabled = not pending and not self._quit_requested and not self._quitting and not self._reset_requested
+        self.window.toggle_btn.setChecked(self.window.current_state == "STATE_BLOCKED")
+        self.window.toggle_btn.setText(
+            f"檢查中，完成後{label}" if pending else f"檢查中，點此{label}")
+        self.window.toggle_btn.setToolTip(
+            f"檢查成功後{label}；檢查失敗時取消預約" if pending
+            else f"預約{label}，確認防火牆狀態後執行一次")
+        self.window.toggle_btn.setEnabled(enabled)
+        self.tray.update_status(self.window.current_state, busy=True)
+        self.tray.status_action.setText("⚪ 配對阻斷：檢查中")
+        self.tray.toggle_action.setText(f"已預約{label}" if pending else f"預約{label}")
+        self.tray.toggle_action.setEnabled(enabled)
+        if self._quit_requested:
+            self.window.toggle_btn.setText("檢查中，等待退出")
+            self.window.toggle_btn.setToolTip("檢查完成後清理封鎖規則並退出")
+            self.tray.toggle_action.setText("等待退出")
+        elif self._reset_requested:
+            self.window.toggle_btn.setText("檢查中，等待還原")
+            self.tray.toggle_action.setText("等待還原設定")
+
     def _on_operation_complete(self, operation, success, state, error):
+        ports = self._active_ports
+        source_hotkey = self._operation_source_hotkey
+        self._operation_source_hotkey = False
+        pending = self._pending_action
+        self._pending_action = None
         self._busy = False
+        self._active_operation = None
+        self._active_ports = None
+        recheck = self._recheck_requested
+        self._recheck_requested = False
+        stale = operation in ("create", "check") and ports != self._ports()
         if success:
-            self._set_state("STATE_BLOCKED" if state == "blocked" else "STATE_NORMAL")
-            if self._operation_source_hotkey and self.notifications_enabled and operation in ("create", "delete"):
+            if operation == "startup":
+                self._startup_complete = True
+            self._set_state("STATE_UNKNOWN" if stale else (
+                "STATE_BLOCKED" if state == "blocked" else "STATE_NORMAL"))
+            if source_hotkey and not self._reset_requested and self.notifications_enabled and operation in ("create", "delete"):
                 self.tray.show_message(
                     "配對已阻斷" if operation == "create" else "已解除阻斷",
-                    f"UDP 埠 {self._ports()[0]}、{self._ports()[1]} 已封鎖" if operation == "create"
+                    f"UDP 埠 {ports[0]}、{ports[1]} 已封鎖" if operation == "create"
                     else "UDP 輸出封鎖已解除",
                     icon=QIcon(BLOCKED_ICON_PATH if operation == "create" else ICON_PATH),
                 )
-            if operation == "create" and self.window.is_auto_recover_enabled():
+            start_recovery = operation == "create" or (
+                operation == "check" and state == "blocked" and not stale
+                and not self.auto_recover_timer.isActive() and not self._recover_due)
+            if start_recovery and self.window.is_auto_recover_enabled():
                 seconds = self.window.get_auto_recover_time()
                 self.auto_recover_timer.start(seconds * 1000)
                 logger.debug("自動恢復計時器啟動：{} 秒", seconds)
-            elif operation in ("delete", "startup", "quit"):
+            elif operation in ("delete", "startup", "quit", "reset"):
                 self.auto_recover_timer.stop()
+                self._recover_due = False
+            elif operation == "check" and state == "normal":
+                self.auto_recover_timer.stop()
+                self._recover_due = False
         else:
             self.auto_recover_timer.stop()
             self._set_state("STATE_UNKNOWN")
             logger.error("{} 失敗：{}", operation, error)
-            if operation != "quit":
-                self._show_error(f"無法確認防火牆狀態：{error}")
+            if operation in ("startup", "check"):
+                canceled = "，預約已取消" if pending else ""
+                self.window.toggle_btn.setToolTip(
+                    f"無法確認 UDP 封鎖狀態{canceled}；按此重新檢查\n{error}")
         if operation == "quit":
             if success:
                 self._finish_quit()
             else:
                 self._ask_quit_failure(error)
-        self._operation_source_hotkey = False
+            return
         if self._quit_requested and operation != "quit":
             self._quit_requested = False
             self.quit_app()
+        elif self._reset_requested:
+            if success and operation in ("startup", "delete", "reset"):
+                self._reset_requested = False
+                self._apply_default_config()
+                self._set_state("STATE_NORMAL")
+            elif operation == "reset":
+                self._reset_requested = False
+                self._register_hotkey()
+                if self.settings_window:
+                    self.settings_window.set_reset_pending(False)
+                self._set_state("STATE_UNKNOWN")
+                self._show_error(f"無法解除封鎖，設定尚未還原：{error}")
+            else:
+                self._request("reset")
+            return
+        elif self._recover_due and self.window.is_auto_recover_enabled():
+            self._recover_due = False
+            self._request("delete")
+        elif success and (stale or recheck) and operation not in ("startup", "delete"):
+            self._request("check")
+        elif success and pending and operation in ("startup", "check"):
+            action, ports, from_hotkey = pending
+            target = "blocked" if action == "create" else "normal"
+            if ports == self._ports() and state != target:
+                self._operation_source_hotkey = from_hotkey
+                self._request(action)
+            else:
+                logger.debug("預約操作已符合目標狀態或選取埠已變更，取消執行")
+        if not success and operation not in ("startup", "check") and not self._quitting:
+            self._show_error(f"無法確認防火牆狀態：{error}")
 
     def _on_port_changed(self, *_):
         self._schedule_save()
-        if not self._loading and not self._busy:
+        if not self._loading and self._busy:
+            self._pending_action = None
+            self._recheck_requested = True
+            if self._active_operation in ("startup", "check"):
+                self._show_checking()
+        elif not self._loading and not self._quitting:
             self._set_state("STATE_UNKNOWN")
             self._request("check")
 
     def _safe_toggle_firewall(self, from_hotkey=False):
-        if self._busy or self._quitting:
+        if self._quitting or self._quit_requested or self._reset_requested:
+            return
+        if self._busy:
+            if self._active_operation in ("startup", "check") and self._pending_action is None:
+                action = "delete" if self.window.current_state == "STATE_BLOCKED" else "create"
+                self._pending_action = (action, self._ports(), from_hotkey)
+                logger.debug("檢查期間預約 {}，埠={}", action, self._ports())
+                self._show_checking()
             return
         state = self.window.current_state
         if state == "STATE_UNKNOWN":
@@ -259,12 +389,19 @@ class AppController(QObject):
 
     def _on_recover_timeout(self):
         logger.debug("自動恢復計時器觸發")
-        if self.window.current_state == "STATE_BLOCKED":
+        if self._quitting or self._quit_requested or not self.window.is_auto_recover_enabled():
+            return
+        if self._busy:
+            if self._active_operation in ("check", "create"):
+                self._recover_due = True
+                logger.debug("自動恢復等待目前作業完成")
+        elif self.window.current_state == "STATE_BLOCKED":
             self._request("delete")
 
     def on_auto_recover_changed(self, enabled):
         if not enabled:
             self.auto_recover_timer.stop()
+            self._recover_due = False
             logger.debug("自動恢復計時器停止")
         elif self.window.current_state == "STATE_BLOCKED" and not self._loading:
             self.auto_recover_timer.start(self.window.get_auto_recover_time() * 1000)
@@ -308,12 +445,36 @@ class AppController(QObject):
         return True
 
     def _register_hotkey(self):
-        if not self.hotkey:
+        if not self.hotkey or self._reset_requested or self._quitting:
             return True
         return self.hotkey_handler.register_hotkey(
             self.hotkey, lambda: self.hotkey_handler.emit_toggle(True))
 
     def clear_config(self):
+        if self._quitting or self._quit_requested:
+            return False
+        self._reset_requested = True
+        self._pending_action = None
+        self.save_timer.stop()
+        if self.settings_window:
+            if self.settings_window.hotkey_capturer._hook is not None:
+                self.settings_window.hotkey_capturer.cancel(emit=False)
+                self.settings_window.hotkey_btn.setText("設定快捷鍵")
+                self.settings_window.hotkey_display.setText(
+                    f"目前設定：{HotkeyManager.format_hotkey_display(self.hotkey) if self.hotkey else '無'}")
+            self.settings_window.set_reset_pending(True)
+        if not self._busy:
+            self._request("reset")
+        elif self._active_operation in ("startup", "check"):
+            self._show_checking()
+        return False
+
+    def _apply_default_config(self):
+        if self.settings_window:
+            self.settings_window.reset_hotkey_capture()
+        self._pending_action = None
+        self._recover_due = False
+        self.auto_recover_timer.stop()
         self.save_timer.stop()
         self.hotkey_handler.unregister_hotkey()
         self.hotkey = ""
@@ -326,8 +487,7 @@ class AppController(QObject):
             self.settings_window.notify_checkbox.blockSignals(True)
             self.settings_window.notify_checkbox.setChecked(True)
             self.settings_window.notify_checkbox.blockSignals(False)
-        self._set_state("STATE_UNKNOWN")
-        self._request("check")
+            self.settings_window.set_reset_pending(False)
 
     def show_window(self):
         self.window.showNormal()
@@ -345,10 +505,16 @@ class AppController(QObject):
         QMessageBox.warning(self.window, "錯誤", message)
 
     def quit_app(self):
+        if self._quitting:
+            return
+        self._pending_action = None
+        self._reset_requested = False
+        if self.settings_window:
+            self.settings_window.set_reset_pending(False)
         if self._busy:
             self._quit_requested = True
-            return
-        if self._quitting:
+            if self._active_operation in ("startup", "check"):
+                self._show_checking()
             return
         self._quitting = True
         self._request("quit")
@@ -371,6 +537,7 @@ class AppController(QObject):
             self._finish_quit()
         else:
             self._quitting = False
+            self._set_state("STATE_UNKNOWN")
 
     def _finish_quit(self):
         if self.save_timer.isActive():

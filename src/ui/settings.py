@@ -86,6 +86,36 @@ class HotkeyCapture(QObject):
                 
         return ' + '.join(formatted_parts)
 
+class HotkeyLabel(QLabel):
+    """顯示省略文字，滑鼠提示保留完整快捷鍵。"""
+    def __init__(self, text):
+        super().__init__()
+        self._full_text = text
+        self.setText(text)
+
+    def setText(self, text):
+        self._full_text = text
+        self.setToolTip(text)
+        self._refresh_text()
+
+    def text(self):
+        return self._full_text
+
+    def _refresh_text(self):
+        if hasattr(self, "_full_text"):
+            super().setText(self.fontMetrics().elidedText(
+                self._full_text, Qt.TextElideMode.ElideRight, max(0, self.width() - 20)))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._refresh_text()
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange):
+            self._refresh_text()
+
+
 class SettingsUI(QWidget):
     def __init__(self, notify_callback=None, hotkey_callback=None, clear_config_callback=None,
                  capture_start_callback=None, capture_end_callback=None):
@@ -160,7 +190,7 @@ class SettingsUI(QWidget):
 
             layout.addWidget(QLabel("配對切換快捷鍵", font=font))
 
-            self.hotkey_display = QLabel("目前設定：無")
+            self.hotkey_display = HotkeyLabel("目前設定：無")
             self.hotkey_display.setFont(font)
             layout.addWidget(self.hotkey_display)
 
@@ -176,6 +206,7 @@ class SettingsUI(QWidget):
             danger_pressed_color = "#a11a1a"
             
             clear_btn = QPushButton("還原預設設定")
+            self.clear_btn = clear_btn
             clear_btn.setFont(font)
             clear_btn.setCursor(QCursor(Qt.PointingHandCursor))
             clear_btn.setStyleSheet(f"""
@@ -300,8 +331,6 @@ class SettingsUI(QWidget):
                 self.hotkey_display.setText(self._previous_hotkey_text)
             else:
                 self.hotkey_display.setText(f"目前設定：{hotkey}")
-            if self.capture_end_callback:
-                self.capture_end_callback()
         except Exception as e:
             logger.error(f"處理捕獲到的快捷鍵時發生錯誤: {e}")
             self.hotkey_display.setText(self._previous_hotkey_text)
@@ -314,16 +343,30 @@ class SettingsUI(QWidget):
             logger.debug("使用者點擊還原預設設定按鈕")
             if QMessageBox.question(
                     self, "還原預設設定",
-                    "確定要還原預設設定嗎？\nUDP 埠、自動恢復及通知將恢復預設值，快捷鍵將被移除。") == QMessageBox.Yes:
+                    "確定要還原預設設定嗎？\n會先解除本工具的封鎖，再還原 UDP 埠、自動恢復及通知設定，並移除快捷鍵。\n清理失敗時保留原設定。") == QMessageBox.Yes:
                 logger.info("使用者確認還原預設設定")
                 if self.clear_config_callback:
-                    self.clear_config_callback()
+                    if self.clear_config_callback() is False:
+                        return
+                self.reset_hotkey_capture()
                 self.hotkey_display.setText("目前設定：無")
                 self.notify_checkbox.setChecked(True)
                 QMessageBox.information(self, "完成", "設定已還原為預設值。")
         except Exception as e:
             logger.error(f"還原預設設定失敗：{e}")
             QMessageBox.warning(self, "無法還原設定", f"還原預設設定失敗：{e}")
+
+    def reset_hotkey_capture(self):
+        """還原設定時取消捕捉，不呼叫恢復舊快捷鍵的回呼。"""
+        self.hotkey_capturer.cancel(emit=False)
+        self._previous_hotkey_text = "目前設定：無"
+        self.hotkey_display.setText(self._previous_hotkey_text)
+        self.hotkey_btn.setText("設定快捷鍵")
+
+    def set_reset_pending(self, pending):
+        self.clear_btn.setEnabled(not pending)
+        self.hotkey_btn.setEnabled(not pending)
+        self.clear_btn.setText("正在解除封鎖…" if pending else "還原預設設定")
 
     def updateShadow(self, focused: bool):
         """更新視窗陰影效果"""
