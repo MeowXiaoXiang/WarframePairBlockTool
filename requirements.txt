@@ -1,4 +1,3 @@
-PySide6==6.9.0
+PySide6==6.11.2
 keyboard==0.13.5
 loguru==0.7.3
-pywin32==310

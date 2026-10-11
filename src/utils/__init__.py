@@ -1,6 +1,4 @@
-"""
-工具模組 - 提供熱鍵管理等實用功能
-"""
+"""快捷鍵管理。"""
 
 from .hotkey import HotkeyManager
 

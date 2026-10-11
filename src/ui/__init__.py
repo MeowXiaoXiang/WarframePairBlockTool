@@ -1,6 +1,4 @@
-"""
-UI 模塊 - 提供主視窗、設定視窗和系統托盤功能
-"""
+"""主視窗、設定視窗與系統托盤元件。"""
 
 from .main import WarframeMainUI
 from .settings import SettingsUI
