@@ -2,7 +2,7 @@
 
 版本歷程請見 [變更紀錄](CHANGELOG.md)。
 
-![Python 3.14](https://img.shields.io/badge/Python-3.14-blue?logo=python) ![License MIT](https://img.shields.io/badge/License-MIT-green) ![最新發布版 v3.0.0](https://img.shields.io/badge/Latest_release-v3.0.0-orange)
+![Python 3.14](https://img.shields.io/badge/Python-3.14-blue?logo=python) ![License MIT](https://img.shields.io/badge/License-MIT-green) ![最新發布版 v3.1.0](https://img.shields.io/badge/Latest_release-v3.1.0-orange)
 
 透過 Windows 防火牆暫時阻斷所選的 UDP 埠，降低加入其他玩家主機的機會。實際主機分配仍由遊戲決定。
 
@@ -10,9 +10,9 @@
 
 ## 下載
 
-[下載 Windows 執行檔 v3.0.0](https://github.com/MeowXiaoXiang/WarframePairBlockTool/releases/download/v3.0.0/WarframePairBlockTool.exe)
+[下載 Windows 執行檔 v3.1.0](https://github.com/MeowXiaoXiang/WarframePairBlockTool/releases/download/v3.1.0/WarframePairBlockTool.exe)
 
-[變更紀錄](CHANGELOG.md)中「尚未發布」的修改尚未包含在上述 v3.0.0 下載檔中。
+本次更新內容請見 [v3.1.0 變更紀錄](CHANGELOG.md#v310--2026-10-11)。
 
 ## 主要功能
 
@@ -27,7 +27,7 @@
 
 ## 狀態與操作
 
-以下行為適用於目前原始碼，尚未包含在 v3.0.0 下載檔中。
+以下說明適用於 v3.1.0。
 
 ### 啟動與檢查
 
